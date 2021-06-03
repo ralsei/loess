@@ -3,6 +3,21 @@
          plot/utils
          plot)
 
+(: ∑ (-> (Vectorof Real) Real))
+(define (∑ vec)
+  (for/sum : Real ([v (in-vector vec)]) v))
+
+(: vc* (-> (Vectorof Real) (Vectorof Real) (Vectorof Real)))
+(define (vc* vec1 vec2)
+  (for/vector : (Vectorof Real)
+      ([v1 (in-vector vec1)]
+       [v2 (in-vector vec2)])
+    (* v1 v2)))
+
+(: expt-real (-> Real Real Real))
+(define (expt-real x b)
+  (assert (expt x b) real?))
+
 (: vmin (-> (Vectorof Real) Real))
 (define (vmin vec)
   (for/fold ([current : Real +inf.0])
@@ -25,7 +40,7 @@
 (define (vargmin vec)
   (for/fold ([cur-val : Real +inf.0]
              [cur-idx : Integer 0]
-             #:result (cast cur-idx Index))
+             #:result (assert cur-idx index?))
             ([(v idx) (in-indexed (in-vector vec))])
     (if (< v cur-val)
         (values v idx)
@@ -35,20 +50,18 @@
 (define (vargmax vec)
   (for/fold ([cur-val : Real -inf.0]
              [cur-idx : Integer 0]
-             #:result (cast cur-idx Index))
+             #:result (assert cur-idx index?))
             ([(v idx) (in-indexed (in-vector vec))])
     (if (> v cur-val)
         (values v idx)
         (values cur-val cur-idx))))
 
-(: tricubic (-> Real Nonnegative-Real))
+(: tricubic (-> Real Real))
 (define (tricubic n)
   (cond [(> (abs n) 1) 0]
-        [else (cast
-               (expt (- 1 (expt (abs n) 3)) 3)
-               Nonnegative-Real)]))
+        [else (expt-real (- 1.0 (expt-real (abs n) 3.0)) 3.0)]))
 
-(: get-indexer (-> (Vectorof Real) Integer (Listof Integer)))
+(: get-indexer (-> (Vectorof Real) Integer (Listof Index)))
 (define (get-indexer distances window)
   (define idx (vargmin distances))
   (define n (vector-length distances))
@@ -59,7 +72,7 @@
         (sub1 n)
         (+ left window)))
 
-  (range left (add1 right)))
+  (range (assert left index?) (assert (add1 right) index?)))
 
 (: index-with (All (A) (-> (Vectorof A) (Listof Index) (Vectorof A))))
 (define (index-with vec indexer)
@@ -93,26 +106,50 @@
   (λ (x)
     (define norm-x (normalize-x xs x))
     (define distances (vector-map (λ ([v : Real]) (abs (- v norm-x))) xs-norm))
-    (define indexer (cast (get-indexer distances window) (Listof Index)))
+    (define indexer (get-indexer distances window))
+    ;; (displayln indexer)
     (define weights (get-weights distances indexer))
 
-    (define W (diagonal-matrix (vector->list weights)))
-    ; XXX: gross
-    (define indexed (index-with xs-norm indexer))
-    (define X^T
-      (vector*->matrix
-       (for/vector : (Vectorof (Vectorof Real)) ([i (in-range (add1 degree))])
-         (vector-map (λ ([v : Real]) (cast (expt v i) Real)) indexed))))
-    (define X (matrix-transpose X^T))
-    (define X^T*W (matrix* X^T W))
-    (define Y (->col-matrix (index-with ys-norm indexer)))
-    (define beta (matrix-transpose
-                  (matrix* (matrix-inverse (matrix* X^T*W X))
-                           X^T*W Y)))
+    (define (with-matrix)
+      (define W (diagonal-matrix (vector->list weights)))
+      ; XXX: gross
+      (define indexed (index-with xs-norm indexer))
+      (define X^T
+        (vector*->matrix
+         (for/vector : (Vectorof (Vectorof Real)) ([i (in-range (add1 degree))])
+           (vector-map (λ ([v : Real]) (expt-real v i)) indexed))))
+      (define X (matrix-transpose X^T))
+      (define X^T*W (matrix* X^T W))
+      (define Y (->col-matrix (index-with ys-norm indexer)))
 
-    (define Xp (->col-matrix (build-list (add1 degree) (λ ([p : Number]) (cast (expt norm-x p) Real)))))
-    (define normalized (matrix* beta Xp))
-    (denormalize-y ys (matrix-ref normalized 0 0))))
+      (define β (matrix->vector
+                 (matrix* (matrix-inverse (matrix* X^T*W X))
+                          X^T*W Y)))
+      (define Xp (build-vector (add1 degree) (λ ([p : Real]) (expt-real norm-x p))))
+      (vdot β Xp))
+
+    (define (with-linear)
+      ; textbook weighted linear regression -- possibly faster
+      (define indexed-x (index-with xs-norm indexer))
+      (define indexed-y (index-with ys-norm indexer))
+
+      (define ∑w (∑ weights))
+      (define ∑wx (vdot indexed-x weights))
+      (define ∑wy (vdot indexed-y weights))
+      (define ∑wx^2 (vdot (vc* indexed-x indexed-x) weights))
+      (define ∑wxy (vdot (vc* indexed-x indexed-y) weights))
+
+      (define μx (/ ∑wx ∑w))
+      (define μy (/ ∑wy ∑w))
+
+      (define b (/ (- ∑wxy (* μx μy ∑w))
+                   (- ∑wx^2 (* μx μx ∑w))))
+      (define a (- μy (* b μx)))
+
+      (+ a (* b norm-x)))
+
+    (define normalized (if (= degree 1) (with-linear) (with-matrix)))
+    (denormalize-y ys normalized)))
 
 (define xx : (Vectorof Real)
   (vector 0.5578196 2.0217271 2.5773252 3.4140288 4.3014084
@@ -127,5 +164,7 @@
           160.78742 168.55567 152.42658 221.70702 222.69040
           243.18828))
 
+(define f (loess-fit xx yy 5 #:degree 1))
+
 (plot (list (points (vector-map (inst vector Real) xx yy))
-            (function (loess-fit xx yy 7 #:degree 1))))
+            (function f)))
