@@ -1,7 +1,10 @@
 #lang typed/racket
-(require math/array math/matrix
+(require math/matrix
          plot/utils
-         plot)
+         plot
+         typed/rackunit)
+(require/typed racket/vector
+  [vector-sort (All (A) (-> (Vectorof A) (-> A A A * Boolean) (Vectorof A)))])
 
 (: ∑ (-> (Vectorof Real) Real))
 (define (∑ vec)
@@ -63,16 +66,14 @@
 
 (: get-indexer (-> (Vectorof Real) Integer (Listof Index)))
 (define (get-indexer distances window)
-  (define idx (vargmin distances))
-  (define n (vector-length distances))
-
-  (define left (max 0 (- idx (quotient window 2))))
-  (define right
-    (if (> (+ left window) (sub1 n))
-        (sub1 n)
-        (+ left window)))
-
-  (range (assert left index?) (assert (add1 right) index?)))
+  (define indexed (map (inst cons Real Index)
+                       (vector->list distances)
+                       (build-list (vector-length distances) (λ ([x : Index]) x))))
+  (define sorted (sort indexed (λ ([a : (Pairof Real Index)]
+                                   [b : (Pairof Real Index)])
+                                 (< (car a) (car b)))))
+  (define nearest (map (inst cdr Real Index) (take sorted window)))
+  (range (apply min nearest) (assert (add1 (apply max nearest)) index?)))
 
 (: index-with (All (A) (-> (Vectorof A) (Listof Index) (Vectorof A))))
 (define (index-with vec indexer)
@@ -107,7 +108,6 @@
     (define norm-x (normalize-x xs x))
     (define distances (vector-map (λ ([v : Real]) (abs (- v norm-x))) xs-norm))
     (define indexer (get-indexer distances window))
-    ;; (displayln indexer)
     (define weights (get-weights distances indexer))
 
     (define (with-matrix)
@@ -164,7 +164,17 @@
           160.78742 168.55567 152.42658 221.70702 222.69040
           243.18828))
 
-(define f (loess-fit xx yy 5 #:degree 1))
+(define f (loess-fit xx yy 9 #:degree 1))
 
 (plot (list (points (vector-map (inst vector Real) xx yy))
             (function f)))
+
+(define sin-x : (Vectorof Real)
+  (vector-sort (ann (build-vector 200 (λ _ (* (random) 4.0 pi))) (Vectorof Real)) <))
+(define sin-y : (Vectorof Real)
+  (vector-map (λ ([x : Real]) (* 2 (sin x))) sin-x))
+(define noisy-sin-y : (Vectorof Real)
+  (vector-map (λ ([x : Real]) (+ x (* 1.5 (random)))) sin-y))
+
+(plot (list (points (vector-map (inst vector Real) sin-x noisy-sin-y))
+            (function (loess-fit sin-x noisy-sin-y 30))))
