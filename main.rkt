@@ -1,10 +1,9 @@
 #lang typed/racket
 (require math/matrix
          plot/utils
-         plot
-         typed/rackunit)
+         plot)
 (require/typed racket/vector
-  [vector-sort (All (A) (-> (Vectorof A) (-> A A A * Boolean) (Vectorof A)))])
+  [vector-sort (∀ (A) (-> (Vectorof A) (-> A A A * Boolean) (Vectorof A)))])
 
 (: ∑ (-> (Vectorof Real) Real))
 (define (∑ vec)
@@ -66,13 +65,17 @@
 
 (: get-indexer (-> (Vectorof Real) Integer (Listof Index)))
 (define (get-indexer distances window)
+  (: take* (∀ (A) (-> (Listof A) Integer (Listof A))))
+  (define (take* lst n)
+    (if (>= (length lst) n) (take lst n) lst))
+
   (define indexed (map (inst cons Real Index)
                        (vector->list distances)
                        (build-list (vector-length distances) (λ ([x : Index]) x))))
   (define sorted (sort indexed (λ ([a : (Pairof Real Index)]
                                    [b : (Pairof Real Index)])
                                  (< (car a) (car b)))))
-  (define nearest (map (inst cdr Real Index) (take sorted window)))
+  (define nearest (map (inst cdr Real Index) (take* sorted window)))
   (range (apply min nearest) (assert (add1 (apply max nearest)) index?)))
 
 (: index-with (All (A) (-> (Vectorof A) (Listof Index) (Vectorof A))))
@@ -98,10 +101,13 @@
   (define ys-max (vmax ys))
   (+ (* y (- ys-max ys-min)) ys-min))
 
-(: loess-fit (->* [(Vectorof Real) (Vectorof Real) Integer]
-                  [#:degree Positive-Integer]
+(: loess-fit (->* [(Vectorof Real) (Vectorof Real)]
+                  [#:span Real
+                   #:degree Positive-Integer]
                   (-> Real Real)))
-(define (loess-fit xs ys window #:degree [degree 1])
+(define (loess-fit xs ys #:span [span 0.75] #:degree [degree 1])
+  (define window (assert (inexact->exact (ceiling (* span (vector-length xs)))) integer?))
+
   (define xs-norm (vnormalize* xs))
   (define ys-norm (vnormalize* ys))
   (λ (x)
@@ -164,7 +170,7 @@
           160.78742 168.55567 152.42658 221.70702 222.69040
           243.18828))
 
-(define f (loess-fit xx yy 9 #:degree 1))
+(define f (loess-fit xx yy #:degree 2))
 
 (plot (list (points (vector-map (inst vector Real) xx yy))
             (function f)))
@@ -177,4 +183,4 @@
   (vector-map (λ ([x : Real]) (+ x (* 1.5 (random)))) sin-y))
 
 (plot (list (points (vector-map (inst vector Real) sin-x noisy-sin-y))
-            (function (loess-fit sin-x noisy-sin-y 30))))
+            (function (loess-fit sin-x noisy-sin-y #:span 0.2))))
