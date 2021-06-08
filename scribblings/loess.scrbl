@@ -23,7 +23,7 @@ for a data visualization.
 @defproc[(loess-fit [xs (Vectorof Real)]
                     [ys (Vectorof Real)]
                     [#:span span Real 0.75]
-                    [#:degree degree Integer 1])
+                    [#:degree degree Positive-Integer 1])
          (-> Real Real)]{
   Creates a line of best fit from the input data. The output is a function which cannot be cleanly represented
   as an equation, designed to be passed to something such as @racketmodname[plot]'s @racket[function] renderer.
@@ -35,7 +35,8 @@ for a data visualization.
   regression. For example, if the span is 0.1, the local regression will use the
   @racket[(* 0.1 (vector-length xs))] nearest neighbors to the input point. Generally, increasing @racket[#:span]
   increases the influence of bias in the resulting model, and decreasing it increases the influence of variance.
-  This number is assumed to be between 0 and 1.
+  This number is assumed to be between @racket[(/ (add1 degree) (vector-length xs))] and 1 (as otherwise there
+  are not enough points to create a fit).
 
   The optional keyword argument @racket[#:degree] dictates the degree of each local regression, and @italic{not}
   the degree of the complete regression.

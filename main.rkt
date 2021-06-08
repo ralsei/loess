@@ -99,14 +99,19 @@
   (+ (* y (- ys-max ys-min)) ys-min))
 
 (: loess-fit (->* [(Vectorof Real) (Vectorof Real)]
-                  [#:span Real
+                  [#:span Positive-Real
                    #:degree Positive-Integer]
                   (-> Real Real)))
 (define (loess-fit xs ys #:span [span 0.75] #:degree [degree 1])
-  (when (not (= (vector-length xs) (vector-length ys)))
-    (error 'loess-fit "input vectors are not the same length: ~a, ~a" xs ys))
+  (define n (vector-length xs))
+  (when (not (= n (vector-length ys)))
+    (error 'loess-fit "input vectors are not the same length: xs ~a, ys ~a"
+           (vector-length xs) (vector-length ys)))
+  (when (not (<= (/ (add1 degree) n) 1))
+    (error 'loess-fit "span is not between (degree + 1)/n and 1: degree ~a, span ~a, n ~a"
+           degree span n))
 
-  (define window (assert (inexact->exact (ceiling (* span (vector-length xs)))) integer?))
+  (define window (assert (inexact->exact (ceiling (* span n))) integer?))
   (define xs-norm (vnormalize* xs))
   (define ys-norm (vnormalize* ys))
 
