@@ -1,5 +1,8 @@
-#lang typed/racket
-(require math/matrix plot/utils)
+#lang typed/racket/base
+(require math/matrix
+         plot/utils
+         racket/list
+         racket/vector)
 (provide loess-fit)
 
 (: ∑ (-> (Vectorof Real) Real))
