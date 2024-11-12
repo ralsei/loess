@@ -10,7 +10,7 @@
      eval))
 
 @title{Loess: local polynomial regression}
-@author{@(author+email "Hazel Levine" "hazel@knightsofthelambdacalcul.us")}
+@author{@(author+email "Tulip Amalie" "tulip@bicompact.space")}
 
 @defmodule[loess #:use-sources (loess)]
 
